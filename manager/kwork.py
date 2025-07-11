@@ -31,6 +31,7 @@ class KworkManager(BaseManager):
             await asyncio.sleep(self.timeout)
 
     async def task(self):
+        
         logger.info("=== Kwork Manager run task ===")
 
         accounts: list[Account] = await Account.all()
@@ -62,7 +63,14 @@ class KworkManager(BaseManager):
 
                 logger.info('Не прочитанных сообщений: %d', len(unprocessed_messages))
 
-                # Ответ на не прочитанные сообщения
+                # Ответ на не прочитанные сообщения (обработка с помощью ИИ)
+                await self.process_message_ai(
+                    messages=unprocessed_messages,
+                    kwork_account=account_kwork,
+                    account_id=account.id
+                )
+
+                # Ответ на не прочитанные сообщения (обработка менеджером)
                 await self.process_messages(
                     messages=unprocessed_messages,
                     kwork_account=account_kwork,
@@ -74,6 +82,14 @@ class KworkManager(BaseManager):
             except Exception as e:
                 logger.exception('Error Kwork Manager. Account ID: %d. Error: %s', account.id, e)
 
+    async def process_message_ai(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
+        """
+        Обрабатывает все новые сообщения с помощью ИИ
+        :param messages: Не обработанные сообщения
+        :param kwork_account: KworkAccount
+        :return:
+        """
+
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
         """
         Обрабатывает все новые сообщения
@@ -82,6 +98,7 @@ class KworkManager(BaseManager):
         :return:
         """
         for message in messages:
+
             if message['mfrom'].lower() == kwork_account.name.lower():
                 chat = await Chat.get(
                     kwork_user_id=int(message['MSGTO']),
@@ -93,29 +110,31 @@ class KworkManager(BaseManager):
                     account_id=account_id
                 )
 
-            # Пересылаем сообщение в топик
-            tg_msg = Message
+            # Сохраняем сообщение в топик
+            tg_msg = None
+            user_message = ""
 
             try:
+                # Если текст без файлов
                 if (text := message.get('message', None)) and not message.get('filesArray', None):
                     for text_part in split_text_by_length(text):
+                        user_message = text_part
                         tg_msg = await bot.send_message(
                             chat_id=chat.tg_chat_id,
                             message_thread_id=chat.tg_topic_id,
-                            text=text_part,
+                            text=user_message,
                             parse_mode=None
                         )
 
-                elif files := message['filesArray']:
+                # Если есть файлы
+                elif files := message.get('filesArray'):
                     for file in files:
-                        # Взять контент медиа файла
                         async with aiohttp.ClientSession(headers=kwork_account.headers) as session:
                             async with session.get(file['path']) as response:
                                 content = await response.read()
                                 status = response.status
 
-                        # Если фотография
-                        if file['path'].lower().endswith('.jpg') or file['path'].lower().endswith('.png'):
+                        if file['path'].lower().endswith(('.jpg', '.png')):
                             if status == 200:
                                 photo = BufferedInputFile(
                                     file=content,
@@ -130,8 +149,6 @@ class KworkManager(BaseManager):
                             else:
                                 logger.error(f"Status code {status}, response - {content}")
                                 continue
-
-                        # Если файл
                         else:
                             if status == 200:
                                 document = BufferedInputFile(
@@ -148,26 +165,30 @@ class KworkManager(BaseManager):
                                 logger.error(f"Status code {status}, response - {content}")
                                 continue
 
+                    # Отправляем текст сообщения, если он есть, после файлов
                     if text := message.get('message', None):
                         for text_part in split_text_by_length(text):
+                            user_message = text_part
                             tg_msg = await bot.send_message(
                                 chat_id=chat.tg_chat_id,
                                 message_thread_id=chat.tg_topic_id,
-                                text=text_part,
+                                text=user_message,
                                 parse_mode=None
                             )
 
+                # Сохраняем в базу
                 await Message.create(
                     kwork_user_id=int(message['MSGFROM']),
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
-                    tg_msg_id=tg_msg.message_id,
-                    text=work_time_text,
+                    tg_msg_id=tg_msg.message_id if tg_msg else None,
+                    text=user_message
                 )
-                logger.info('Message resented to Telegram')
+                logger.info('Message resent to Telegram and saved in DB')
 
             except Exception as e:
-                logger.error("Error on process_messages: %s", e)
+                logger.error(f"Error processing message {message.get('MID')}: {e}")
+
 
             await asyncio.sleep(3)
 
