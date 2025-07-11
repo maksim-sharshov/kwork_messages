@@ -99,16 +99,21 @@ class KworkManager(BaseManager):
         """
         for message in messages:
 
+            # Получаем id пользователя в kwork
             if message['mfrom'].lower() == kwork_account.name.lower():
-                chat = await Chat.get(
-                    kwork_user_id=int(message['MSGTO']),
-                    account_id=account_id
-                )
+                kwork_user_id = int(message['MSGTO'])
             else:
-                chat = await Chat.get(
-                    kwork_user_id=int(message['MSGFROM']),
-                    account_id=account_id
-                )
+                kwork_user_id = int(message['MSGFROM'])
+
+            # Если флаг info_user.flag не установлен (False), то ответ отправляет ИИ
+            info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
+            if info_user and not info_user.flag:
+                continue
+
+            chat = await Chat.get(
+                kwork_user_id=kwork_user_id,
+                account_id=account_id
+            )
 
             # Сохраняем сообщение в топик
             tg_msg = None
@@ -289,7 +294,10 @@ class KworkManager(BaseManager):
         info_user = await ManagerMode.get(kwork_user_id=user_id)
 
         if chat_with_user and not info_user:
-            await ManagerMode.create(kwork_user_id=user_id, flag=False)
+            await ManagerMode.create(kwork_user_id=user_id, flag=True)
+            return True
+        elif chat_with_user and info_user:
+            await info_user.update(flag=True)
             return True
         elif chat_with_user:
             return True
