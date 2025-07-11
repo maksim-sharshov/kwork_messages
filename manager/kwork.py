@@ -7,7 +7,7 @@ from aiogram.types import BufferedInputFile, ReactionTypeEmoji
 from integrations.templates import work_time_text
 from core.bot import bot
 from core.logger import manager_logger as logger
-from db.models.models import Account, Chat, Message
+from db.models.models import Account, Chat, Message, ManagerMode
 from integrations.kwork import KworkAccount
 from manager.base import BaseManager
 from settings import settings
@@ -16,7 +16,8 @@ from utils.time import weekend_time
 
 
 class KworkManager(BaseManager):
-    timeout = 40
+    
+    timeout = 1
 
     async def run(self):
         logger.info('=== Kwork Manager is running ===')
@@ -248,6 +249,33 @@ class KworkManager(BaseManager):
             await asyncio.sleep(random.uniform(0.5, 1.5))  # для защиты от блоков
 
         return result
+    
+    @classmethod
+    async def should_skip(cls, user_id: int, account_id: int) -> bool:
+        """
+        Проверяет, нужно ли пропустить обработку пользователя.
+
+        Если пользователь есть в базе Chat, но отсутствует в ManagerMode — создаёт запись со статусом flag=False.
+        Возвращает True, если пользователь обрабатывается менеджером (в Chat) или ИИ (flag=True в ManagerMode),
+        иначе False (обработку нужно выполнять).
+        
+        :param user_id: ID пользователя (kwork_user_id)
+        :param account_id: ID аккаунта
+        :return: bool — True, если нужно пропустить обработку, False — если нужно обрабатывать
+        """
+
+        chat_with_user = await Chat.get(kwork_user_id=user_id, account_id=account_id)
+        info_user = await ManagerMode.get(kwork_user_id=user_id)
+
+        if chat_with_user and not info_user:
+            await ManagerMode.create(kwork_user_id=user_id, flag=False)
+            return True
+        elif chat_with_user:
+            return True
+        elif info_user and info_user.flag:
+            return True
+        else:
+            return False
 
     async def create_topic(self, account_username: str, account_id: int, dialogs: list[dict]) -> None:
         """
@@ -258,10 +286,9 @@ class KworkManager(BaseManager):
         :return:
         """
         for dialog in dialogs:
-            if await Chat.get(
-                    kwork_user_id=dialog['user_id'],
-                    account_id=account_id
-            ):
+            
+            skip = await self.should_skip(dialog['user_id'], account_id) # Создать ли топик?
+            if skip:
                 continue
 
             topic_title = f'K | {dialog['username']} | {account_username}'

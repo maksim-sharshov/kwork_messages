@@ -1,6 +1,6 @@
 from typing import TypeVar, Generic, Sequence
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Boolean
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Mapped, selectinload, load_only
 from sqlalchemy.sql import select, update as sqlalchemy_update
@@ -209,3 +209,19 @@ class Message(Base, ModelAdmin):
         default=False
     )
     text: Mapped[str] = mapped_column(comment='Текст сообщения')
+
+
+class ManagerMode(Base, ModelAdmin):
+
+    __tablename__ = 'manager_mode'
+
+    id: Mapped[intpk]
+    kwork_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        comment='От кого сообщение'
+    )
+    flag: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        comment='False — отвечает ИИ, True — в чат'
+    )
