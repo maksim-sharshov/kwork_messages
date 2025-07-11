@@ -32,7 +32,7 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
         text=msg.text
     )
 
-    logger.info('New message in Topic %s. Message: %s', chat.title, kwork_message)
+    logger.info('New message in Topic %s. Message: %s', chat.title, msg.text)
 
     if kwork_message.get('status') == 'error':
         return await msg.answer(
@@ -41,6 +41,7 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
 
     await Message.create(
         kwork_user_id=0,
+        recipient_id=chat.kwork_user_id,
         username=kwork_account.name,
         kwork_msg_id=kwork_message['MID'],
         tg_msg_id=msg.message_id,

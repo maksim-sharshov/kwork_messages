@@ -23,6 +23,15 @@ class PostgresConfig(BaseSettings):
         extra = 'ignore'
 
 
+class GptConfig(BaseSettings):
+    TOKEN: str
+    
+    class Config:
+        env_prefix = 'OPENAI_'
+        env_file = '.env'
+        extra = 'ignore'
+
+
 class BotConfig(BaseSettings):
     TOKEN: str
     CHAT_ID: int
@@ -58,5 +67,6 @@ class BotConfig(BaseSettings):
 class Settings:
     postgres = PostgresConfig()
     bot = BotConfig()
+    openai = GptConfig()
 
 settings = Settings()

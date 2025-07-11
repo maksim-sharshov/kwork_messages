@@ -9,6 +9,7 @@ from core.bot import bot
 from core.logger import manager_logger as logger
 from db.models.models import Account, Chat, Message, ManagerMode
 from integrations.kwork import KworkAccount
+from integrations.openai import GPTHandler
 from manager.base import BaseManager
 from settings import settings
 from utils.kwork import msg_in_chat, split_text_by_length
@@ -89,6 +90,62 @@ class KworkManager(BaseManager):
         :param kwork_account: KworkAccount
         :return:
         """
+        for message in messages:
+
+            # Получаем id пользователя в kwork
+            recipient_id = message.get('MSGTO')
+            if message['mfrom'].lower() == kwork_account.name.lower():
+                kwork_user_id = int(message['MSGTO'])
+            else:
+                kwork_user_id = int(message['MSGFROM'])
+
+            # Если флаг info_user.flag установлен (True), то ответ отправляет Менеджеру
+            info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
+            if info_user and info_user.flag:
+                continue
+
+            if recipient_id == kwork_user_id: # ПОТОМ УДАЛИТЬ
+                continue
+
+            # Сохраняем сообщение пользователя
+            user_message = ""
+            try:
+                # Если текст без файлов
+                if (text := message.get('message', None)) and not message.get('filesArray', None):
+                    for text_part in split_text_by_length(text):
+                        user_message = text_part
+                        await Message.create(
+                            kwork_user_id=kwork_user_id,
+                            recipient_id=recipient_id,
+                            username=message['mfrom'],
+                            kwork_msg_id=message['MID'],
+                            tg_msg_id=None,
+                            text=user_message,
+                            viewed=True
+                        )
+            except Exception as e:
+                logger.error(f"Error processing message {message.get('MID')}: {e}")
+
+            # Запрос в gpt
+            gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
+            #answer, application = 'круто', None
+            answer, application = await gpt.generate_response()
+
+            kwork_message = await kwork_account.send_message(
+                user_id=kwork_user_id,
+                text=answer
+            )
+
+            # Сохраняем ответ GPT
+            await Message.create(
+                kwork_user_id=1,
+                recipient_id=kwork_user_id,
+                username=kwork_account.name + ' (gpt)',
+                kwork_msg_id=kwork_message['MID'],
+                text=answer,
+                tg_msg_id=None,
+                viewed=True
+            )
 
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
         """
@@ -121,6 +178,7 @@ class KworkManager(BaseManager):
 
             try:
                 # Если текст без файлов
+                recipient_id = message.get('MSGTO')
                 if (text := message.get('message', None)) and not message.get('filesArray', None):
                     for text_part in split_text_by_length(text):
                         user_message = text_part
@@ -183,7 +241,8 @@ class KworkManager(BaseManager):
 
                 # Сохраняем в базу
                 await Message.create(
-                    kwork_user_id=int(message['MSGFROM']),
+                    kwork_user_id=kwork_user_id,
+                    recipient_id=recipient_id,
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
                     tg_msg_id=tg_msg.message_id if tg_msg else None,
@@ -224,47 +283,27 @@ class KworkManager(BaseManager):
                 continue
 
             chat_messages = messages["data"]["messages"]
-
-            # Проверяем, отправлялось ли сообщение про выходной
-            try:
-                answered = msg_in_chat(messages=chat_messages, text=work_time_text)
-
-                if weekend_time() and dialog.get('unread_count', 0) > 0 and not answered:
-                    try:
-                        kwork_msg = await kwork_account.send_message(
-                            user_id=int(user_id),
-                            text=work_time_text
-                        )
-                        logger.info('Sent weekend time message to %s', username)
-                    except Exception as e:
-                        logger.error(f"[check_messages] Ошибка при отправке выходного сообщения {username}: {e}")
-                        kwork_msg = None
-                else:
-                    kwork_msg = None
-            except Exception as e:
-                logger.error(f"[check_messages] Ошибка в msg_in_chat или логике выходного: {e}")
-                continue
-
             for message in chat_messages:
                 try:
                     msg_in_bot = await Message.get(kwork_msg_id=message['MID'])
-
+                    
                     if not msg_in_bot:
                         result.append(message)
                         continue
 
                     if message.get('unread') == 0 and not msg_in_bot.viewed:
                         if message['mfrom'].lower() == kwork_account.name:
-                            try:
-                                await bot.set_message_reaction(
-                                    chat_id=settings.bot.CHAT_ID,
-                                    message_id=msg_in_bot.tg_msg_id,
-                                    reaction=[ReactionTypeEmoji(emoji='👀')]
-                                )
-                                await msg_in_bot.update(viewed=True)
-                                logger.info('Set message viewed')
-                            except Exception as e:
-                                logger.error(f'Error set reaction: {e}')
+                            if msg_in_bot.tg_msg_id is not None:
+                                try:
+                                    await bot.set_message_reaction(
+                                        chat_id=settings.bot.CHAT_ID,
+                                        message_id=msg_in_bot.tg_msg_id,
+                                        reaction=[ReactionTypeEmoji(emoji='👀')]
+                                    )
+                                    await msg_in_bot.update(viewed=True)
+                                    logger.info('Set message viewed')
+                                except Exception as e:
+                                    logger.error(f'Error set reaction: {e}')
 
                             await asyncio.sleep(3)
 
@@ -293,12 +332,14 @@ class KworkManager(BaseManager):
         chat_with_user = await Chat.get(kwork_user_id=user_id, account_id=account_id)
         info_user = await ManagerMode.get(kwork_user_id=user_id)
 
+        """elif chat_with_user and info_user:
+            await info_user.update(flag=True)
+            return True"""
+
         if chat_with_user and not info_user:
             await ManagerMode.create(kwork_user_id=user_id, flag=True)
             return True
-        elif chat_with_user and info_user:
-            await info_user.update(flag=True)
-            return True
+        
         elif chat_with_user:
             return True
         elif info_user and info_user.flag:

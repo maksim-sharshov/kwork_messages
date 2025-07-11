@@ -191,7 +191,14 @@ class Message(Base, ModelAdmin):
     id: Mapped[intpk]
     kwork_user_id: Mapped[int] = mapped_column(
         BigInteger,
-        comment='От кого сообщение'
+        comment = """ID отправителя сообщения:
+                    0 — менеджер из Telegram-группы,
+                    1 — ИИ-агент,
+                    любое другое число — ID пользователя Kwork."""
+    )
+    recipient_id: Mapped[int] = mapped_column(
+        BigInteger,
+        comment="ID получателя в Kwork"
     )
     username: Mapped[str_240] = mapped_column(
         comment='От кого сообщение'
@@ -200,9 +207,9 @@ class Message(Base, ModelAdmin):
         BigInteger,
         comment='ID сообщения в kwork'
     )
-    tg_msg_id: Mapped[int] = mapped_column(
+    tg_msg_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        comment='ID сообщения в тг чате'
+        comment='ID сообщения в тг чате. Если None - значит ИИ'
     )
     viewed: Mapped[bool | None] = mapped_column(
         comment='Сообщение просмотрено',
