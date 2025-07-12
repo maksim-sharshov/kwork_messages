@@ -1,7 +1,5 @@
-from datetime import datetime
-
 import pytz
-
+from datetime import datetime
 
 def weekend_time() -> bool:
     """

@@ -57,10 +57,7 @@ class GPTHandler:
 
         # Сортировка по времени, если в модели есть created_at
         history.sort(key=lambda x: x.get("created_at", 0))
-        print(history)
-
         return history
-
 
     async def generate_response(self) -> Tuple[str, Optional[str]]:
         """
@@ -72,9 +69,8 @@ class GPTHandler:
         full_messages = [{"role": "system", "content": prompt}] + history
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o", 
+            model="gpt-4o-mini", 
             messages=full_messages,
-            temperature=0.7,
         )
 
         reply = response.choices[0].message.content.strip()
@@ -99,5 +95,8 @@ class GPTHandler:
 
                 # Убираем заявку из ответа
                 reply = "\n".join(lines[:start] + lines[end:]).strip()
+
+                if not reply.strip() and application_text:
+                    reply = "Спасибо! Мы приняли заявку. Ожидайте, пожалуйста, обратной связи."
 
         return reply, application_text

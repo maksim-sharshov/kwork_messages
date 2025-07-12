@@ -49,13 +49,6 @@ class KworkManager(BaseManager):
 
                 logger.info('Подключился к %s', account_kwork.account_url)
 
-                # Создание топиков для всех диалогов
-                await self.create_topic(
-                    account_username=account_kwork.name,
-                    account_id=account.id,
-                    dialogs=dialogs['data']['rows']
-                )
-
                 # Проверка новых сообщений в чате
                 unprocessed_messages = await self.check_messages(
                     dialogs=dialogs['data']['rows'],
@@ -64,19 +57,25 @@ class KworkManager(BaseManager):
 
                 logger.info('Не прочитанных сообщений: %d', len(unprocessed_messages))
 
-                # Ответ на не прочитанные сообщения (обработка с помощью ИИ)
-                await self.process_message_ai(
-                    messages=unprocessed_messages,
-                    kwork_account=account_kwork,
-                    account_id=account.id
-                )
-
+                # Создание топиков для всех диалогов
+                await self.update_flag_and_check(
+                    account_id=account.id,
+                    dialogs=dialogs['data']['rows']
+                )  
+                
                 # Ответ на не прочитанные сообщения (обработка менеджером)
                 await self.process_messages(
                     messages=unprocessed_messages,
                     kwork_account=account_kwork,
                     account_id=account.id
                 )
+
+                # Ответ на не прочитанные сообщения (обработка с помощью ИИ)
+                await self.process_message_ai(
+                    messages=unprocessed_messages,
+                    kwork_account=account_kwork,
+                    account_id=account.id
+                )          
 
                 await asyncio.sleep(random.uniform(1, 3))
 
@@ -114,13 +113,14 @@ class KworkManager(BaseManager):
                 if (text := message.get('message', None)) and not message.get('filesArray', None):
                     for text_part in split_text_by_length(text):
                         user_message = text_part
+                        response_time = "Да, сейчас выходное время." if weekend_time() else "Нет, сейчас рабочее время."
                         await Message.create(
                             kwork_user_id=kwork_user_id,
                             recipient_id=recipient_id,
                             username=message['mfrom'],
                             kwork_msg_id=message['MID'],
                             tg_msg_id=None,
-                            text=user_message,
+                            text=user_message + response_time,
                             viewed=True
                         )
             except Exception as e:
@@ -128,20 +128,28 @@ class KworkManager(BaseManager):
 
             # Запрос в gpt
             gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
-            #answer, application = 'круто', None
             answer, application = await gpt.generate_response()
 
             kwork_message = await kwork_account.send_message(
                 user_id=kwork_user_id,
                 text=answer
             )
+            print('\n\n', answer, '\n\n' ,application, '\n\n')
 
+            if application: # Перевод на менеджера
+                await self.create_topic(
+                    message=message,
+                    kwork_user_id=kwork_user_id,
+                    account_id=account_id,
+                    application=application
+                )
+                
             # Сохраняем ответ GPT
             await Message.create(
                 kwork_user_id=1,
                 recipient_id=kwork_user_id,
                 username=kwork_account.name + ' (gpt)',
-                kwork_msg_id=kwork_message['MID'],
+                kwork_msg_id=kwork_message.get('MID', 1),
                 text=answer,
                 tg_msg_id=None,
                 viewed=True
@@ -315,67 +323,69 @@ class KworkManager(BaseManager):
 
         return result
     
-    @classmethod
-    async def should_skip(cls, user_id: int, account_id: int) -> bool:
+    async def update_flag_and_check(self, account_id: int, dialogs: list[dict]) -> bool:
         """
-        Проверяет, нужно ли пропустить обработку пользователя.
+        Обновляет или создаёт запись ManagerMode с флагом для пользователя.
 
-        Если пользователь есть в базе Chat, но отсутствует в ManagerMode — создаёт запись со статусом flag=False.
-        Возвращает True, если пользователь обрабатывается менеджером (в Chat) или ИИ (flag=True в ManagerMode),
-        иначе False (обработку нужно выполнять).
-        
-        :param user_id: ID пользователя (kwork_user_id)
-        :param account_id: ID аккаунта
-        :return: bool — True, если нужно пропустить обработку, False — если нужно обрабатывать
+        :param user_id: Идентификатор пользователя.
+        :param account_id: Идентификатор аккаунта.
+        :return: True, если запись была создана или обновлена, иначе False.
         """
-
-        chat_with_user = await Chat.get(kwork_user_id=user_id, account_id=account_id)
-        info_user = await ManagerMode.get(kwork_user_id=user_id)
-
-        """elif chat_with_user and info_user:
-            await info_user.update(flag=True)
-            return True"""
-
-        if chat_with_user and not info_user:
-            await ManagerMode.create(kwork_user_id=user_id, flag=True)
-            return True
         
-        elif chat_with_user:
-            return True
-        elif info_user and info_user.flag:
-            return True
-        else:
+        for dialog in dialogs:
+
+            user_id = dialog['user_id']
+            chat_with_user = await Chat.get(kwork_user_id=user_id, account_id=account_id)
+            info_user = await ManagerMode.get(kwork_user_id=user_id)
+
+            if chat_with_user and not info_user:
+                await ManagerMode.create(kwork_user_id=user_id, flag=True)
+                return True
+
+            elif chat_with_user and info_user:
+                if not info_user.flag:
+                    await info_user.update(flag=True)
+                return True
+
+            if not info_user:
+                await ManagerMode.create(kwork_user_id=user_id)
+
             return False
 
-    async def create_topic(self, account_username: str, account_id: int, dialogs: list[dict]) -> None:
+    async def create_topic(self, message: dict, kwork_user_id: int, account_id: int, application: str) -> None:
         """
-            Для каждого диалога в кворк создаёт свой топик в группе
-        :param account_username: Username аккаунта
-        :param account_id: Account id
-        :param dialogs: Диалоги
-        :return:
+        Создаёт новую тему в форуме и записывает информацию о чате в базу.
+
+        :param message: Словарь с информацией о сообщении пользователя.
+        :param kwork_user_id: Идентификатор пользователя Kwork.
+        :param account_id: Идентификатор аккаунта.
+        :param application: Текст заявки или сообщения для отправки в тему.
+        :return: None
         """
-        for dialog in dialogs:
-            
-            skip = await self.should_skip(dialog['user_id'], account_id) # Создать ли топик?
-            if skip:
-                continue
 
-            topic_title = f'K | {dialog['username']} | {account_username}'
+        info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
+        await info_user.update(flag=True)
 
-            topic = await bot.create_forum_topic(
-                chat_id=settings.bot.CHAT_ID,
-                name=topic_title
-            )
+        topic_title = f'K | {message['mfrom']} | {message['mto']}'
 
-            chat = await Chat.create(
-                kwork_user_id=dialog['user_id'],
-                tg_chat_id=settings.bot.CHAT_ID,
-                tg_topic_id=topic.message_thread_id,
-                title=topic_title,
-                account_id=account_id
-            )
+        topic = await bot.create_forum_topic(
+            chat_id=settings.bot.CHAT_ID,
+            name=topic_title
+        )
 
-            logger.info('Создал новый чат: %s', chat.title)
+        chat = await Chat.create(
+            kwork_user_id=kwork_user_id,
+            tg_chat_id=settings.bot.CHAT_ID,
+            tg_topic_id=topic.message_thread_id,
+            title=topic_title,
+            account_id=account_id
+        )
 
-            await asyncio.sleep(3)
+        logger.info('Создал новый чат: %s', chat.title)
+
+        await bot.send_message(
+            chat_id=chat.tg_chat_id,
+            message_thread_id=chat.tg_topic_id,
+            text=application,
+            parse_mode=None
+        )
