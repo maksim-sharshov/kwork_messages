@@ -1,5 +1,29 @@
+import io
+import docx
 import time
+import PyPDF2
+from core.logger import manager_logger as logger
 
+
+class DocumentParser:
+    @staticmethod
+    def extract_text(content: bytes, filename: str) -> str:
+        filename = filename.lower()
+        try:
+            if filename.endswith('.txt'):
+                return content.decode(errors='ignore')
+            elif filename.endswith('.docx'):
+                file_stream = io.BytesIO(content)
+                doc = docx.Document(file_stream)
+                return '\n'.join([para.text for para in doc.paragraphs])
+            elif filename.endswith('.pdf'):
+                file_stream = io.BytesIO(content)
+                reader = PyPDF2.PdfReader(file_stream)
+                return '\n'.join([page.extract_text() or '' for page in reader.pages])
+        except Exception as e:
+            logger.error(f"Ошибка при извлечении текста из документа {filename}: {e}")
+        return ""
+    
 
 def msg_in_chat(messages: list, text: str, time_space: int = 43200) -> bool:
     """

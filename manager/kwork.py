@@ -12,8 +12,9 @@ from integrations.kwork import KworkAccount
 from integrations.openai import GPTHandler
 from manager.base import BaseManager
 from settings import settings
-from utils.kwork import msg_in_chat, split_text_by_length
+from utils.kwork import msg_in_chat, split_text_by_length, DocumentParser
 from utils.time import weekend_time
+
 
 
 class KworkManager(BaseManager):
@@ -90,41 +91,62 @@ class KworkManager(BaseManager):
         :return:
         """
         for message in messages:
-
-            # Получаем id пользователя в kwork
             recipient_id = message.get('MSGTO')
             if message['mfrom'].lower() == kwork_account.name.lower():
                 kwork_user_id = int(message['MSGTO'])
             else:
                 kwork_user_id = int(message['MSGFROM'])
 
-            # Если флаг info_user.flag установлен (True), то ответ отправляет Менеджеру
             info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
             if info_user and info_user.flag:
                 continue
 
-            if recipient_id == kwork_user_id: # ПОТОМ УДАЛИТЬ
+            if recipient_id == kwork_user_id:  # ПОТОМ УДАЛИТЬ
                 continue
 
-            # Сохраняем сообщение пользователя
             user_message = ""
+            document_text = ""
+
             try:
-                # Если текст без файлов
-                if (text := message.get('message', None)) and not message.get('filesArray', None):
-                    for text_part in split_text_by_length(text):
-                        user_message = text_part
-                        response_time = "Да, сейчас выходное время." if weekend_time() else "Нет, сейчас рабочее время."
-                        await Message.create(
-                            kwork_user_id=kwork_user_id,
-                            recipient_id=recipient_id,
-                            username=message['mfrom'],
-                            kwork_msg_id=message['MID'],
-                            tg_msg_id=None,
-                            text=user_message + response_time,
-                            viewed=True
-                        )
+                # ===== Обработка файлов, если они есть =====
+                if files := message.get('filesArray'):
+                    for file in files:
+                        async with aiohttp.ClientSession(headers=kwork_account.headers) as session:
+                            async with session.get(file['path']) as response:
+                                content = await response.read()
+                                status = response.status
+
+                        if status != 200:
+                            logger.error(f"Ошибка загрузки файла {file['path']}. Status: {status}")
+                            continue
+
+                        filename = file['path'].split('/')[-1]
+                        text_from_file = DocumentParser.extract_text(content, filename)
+
+                        if text_from_file:
+                            document_text += f"\n\n--- Из файла {filename} ---\n{text_from_file}"
+
+                # ===== Обработка обычного текста =====
+                if (text := message.get('message', None)):
+                    user_message = text
+
             except Exception as e:
                 logger.error(f"Error processing message {message.get('MID')}: {e}")
+                continue
+
+            # ===== Создаём запись сообщения в БД =====
+            response_time = "Да, сейчас выходное время." if weekend_time() else "Нет, сейчас рабочее время."
+            full_input_text = user_message + "\n" + document_text + "\n" + response_time
+            for part in split_text_by_length(full_input_text):
+                await Message.create(
+                    kwork_user_id=kwork_user_id,
+                    recipient_id=recipient_id,
+                    username=message['mfrom'],
+                    kwork_msg_id=message['MID'],
+                    tg_msg_id=None,
+                    text=part,
+                    viewed=True
+                )
 
             # Запрос в gpt
             gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)

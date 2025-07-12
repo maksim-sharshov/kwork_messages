@@ -99,4 +99,4 @@ class GPTHandler:
                 if not reply.strip() and application_text:
                     reply = "Спасибо! Мы приняли заявку. Ожидайте, пожалуйста, обратной связи."
 
-        return reply, application_text
+        return reply.replace('`', ''), application_text
