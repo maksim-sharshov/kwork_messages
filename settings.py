@@ -54,6 +54,24 @@ class BotConfig(BaseSettings):
         extra = 'ignore'
 
 
+class RedisConfig(BaseSettings):
+    NAME: str
+    HOST: str
+    PORT: int
+    PASSWORD: str
+    USER: str
+
+    class Config:
+        env_prefix = 'REDIS_'
+        env_file = '.env'
+        extra = 'ignore'
+
+    @property
+    def URL(self) -> str:
+        return f"redis://:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.NAME}"
+
+
+
 # class OtaskConfig(BaseSettings):
 #     WS_SLUG: str
 #     PASSWORD: str
@@ -66,6 +84,7 @@ class BotConfig(BaseSettings):
 
 class Settings:
     postgres = PostgresConfig()
+    redis = RedisConfig()
     bot = BotConfig()
     openai = GptConfig()
 

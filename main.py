@@ -5,10 +5,12 @@ from aiogram import Dispatcher, Bot
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommandScopeDefault
 
+
 from core.bot import bot
-from db.psql.crud.base import create_tables
-from bot.handlers import routers
 from settings import settings
+from bot.handlers import routers
+from db.psql.crud.base import create_tables
+
 
 dp = Dispatcher(
     bot=bot,
@@ -21,18 +23,20 @@ dp.include_routers(
 
 async def startup(bot: Bot) -> None:
     """
-        Активируется при выключении
-    :param bot: Bot
-    :return:
+    Выполняется при запуске бота
     """
     logging.basicConfig(level=logging.INFO)
 
+    # Инициализация таблиц PostgreSQL
     await create_tables()
+
+    # Команды и webhook
     await bot.set_my_commands(
         commands=settings.bot.COMMANDS,
         scope=BotCommandScopeDefault()
     )
     await bot.delete_webhook()
+
 
 
 async def shutdown(bot: Bot) -> None:

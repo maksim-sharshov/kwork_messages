@@ -10,14 +10,22 @@
 1. Создайте файл `.env` в корневой папке проекта и заполните его значениями переменных:
 
     ```
-   BOT_TOKEN=Токен бота
-   BOT_CHAT_ID=Чат в котором создаются топики
+   BOT_TOKEN=
+   BOT_CHAT_ID=
     
-   POSTGRES_USER=Юзер бд
-   POSTGRES_NAME=Имя бд
-   POSTGRES_HOST=Хост бд
-   POSTGRES_PORT=Порт бд
-   POSTGRES_PASSWORD=Пароль бд
+   POSTGRES_USER=
+   POSTGRES_NAME=
+   POSTGRES_HOST=
+   POSTGRES_PORT=
+   POSTGRES_PASSWORD=
+
+   REDIS_NAME=
+   REDIS_HOST=
+   REDIS_PORT=
+   REDIS_PASSWORD=
+   REDIS_USER=
+
+   OPENAI_TOKEN=
     ```
 
 2. Скачайте необходимые проекту библиотеки командой:

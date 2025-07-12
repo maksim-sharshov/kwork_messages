@@ -13,6 +13,18 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  redis:
+    image: redis/redis-stack:latest
+    restart: always
+    container_name: redis
+    command: redis-server --requirepass ${PASSWORD} --loadmodule /opt/redis-stack/lib/redisearch.so --loadmodule /opt/redis-stack/lib/rejson.so --loadmodule /opt/redis-stack/lib/redisbloom.so --loadmodule /opt/redis-stack/lib/redistimeseries.so
+    expose:
+      - 6379
+    volumes:
+      - redis-data:/data
+    env_file:
+      - .env
+
   bot:
     build:
       context: .
@@ -40,3 +52,5 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
+

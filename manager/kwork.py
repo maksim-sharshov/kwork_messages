@@ -8,6 +8,7 @@ from integrations.templates import work_time_text
 from core.bot import bot
 from core.logger import manager_logger as logger, dialogs_logger, error_logger
 from db.psql.models.models import Account, Chat, Message, ManagerMode
+from db.redis.models.models import MessageAI
 from integrations.kwork import KworkAccount
 from integrations.openai import GPTHandler
 from manager.base import BaseManager
@@ -135,17 +136,14 @@ class KworkManager(BaseManager):
                 continue
 
             # ===== Создаём запись сообщения в БД =====
-            response_time = "Да, сейчас выходное время." if weekend_time() else "Нет, сейчас рабочее время."
+            response_time = "Не работаем, сейчас выходное время." if weekend_time() else "Работаем, сейчас рабочее время."
             full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time )
             for part in split_text_by_length(full_input_text):
-                await Message.create(
-                    kwork_user_id=kwork_user_id,
-                    recipient_id=recipient_id,
-                    username=message['mfrom'],
-                    kwork_msg_id=message['MID'],
-                    tg_msg_id=None,
-                    text=part,
-                    viewed=True
+                await MessageAI.create(
+                    kwork_id=kwork_user_id,
+                    recipient_id=1,
+                    sender='user',
+                    content=user_message
                 )
                 dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
 
@@ -167,15 +165,11 @@ class KworkManager(BaseManager):
                     application=application
                 )
                 
-            # Сохраняем ответ GPT
-            await Message.create(
-                kwork_user_id=1,
+            await MessageAI.create(
+                kwork_id=1,
                 recipient_id=kwork_user_id,
-                username=kwork_account.name + ' (gpt)',
-                kwork_msg_id=kwork_message.get('MID', 1),
-                text=answer,
-                tg_msg_id=None,
-                viewed=True
+                sender='ai',
+                content=answer
             )
 
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:

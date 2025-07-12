@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Optional, Tuple
 
-from openai import AsyncOpenAI
-from db.psql.models.models import Message
 from settings import settings
+from openai import AsyncOpenAI
+from db.redis.models.models import MessageAI
 
 
 class GPTHandler:
@@ -21,42 +21,35 @@ class GPTHandler:
 
     async def get_history(self) -> list[dict]:
         """
-        Возвращает историю сообщений между пользователем и ИИ, только текст.
-        Включает как сообщения пользователя, так и ответы ИИ.
+        Возвращает историю сообщений между пользователем и ИИ (только текст),
+        собранную из Redis. Включает сообщения и от пользователя, и от ИИ.
         """
 
         # Сообщения пользователя
-        user_messages = await Message.filter(
-            kwork_user_id=self.kwork_user_id,
-            recipient_id=self.recipient_id,
-            tg_msg_id=None
+        user_messages = await MessageAI.filter(
+            kwork_id=self.kwork_user_id,
+            recipient_id=self.recipient_id
         )
 
         # Ответы ИИ
-        assistant_messages = await Message.filter(
-            recipient_id=self.kwork_user_id,
-            kwork_user_id=1,
-            tg_msg_id=None
+        assistant_messages = await MessageAI.filter(
+            kwork_id=1,
+            recipient_id=self.kwork_user_id
         )
 
+        # Объединяем и сортируем все сообщения по времени
+        all_messages = list(user_messages) + list(assistant_messages)
+        all_messages.sort(key=lambda x: x.created_at)
+
         history = []
-
-        for msg in user_messages:
-            if msg.text:
+        for msg in all_messages:
+            if msg.content:
+                role = "user" if msg.kwork_id == self.kwork_user_id else "assistant"
                 history.append({
-                    "role": "user",
-                    "content": msg.text
+                    "role": role,
+                    "content": msg.content
                 })
 
-        for msg in assistant_messages:
-            if msg.text:
-                history.append({
-                    "role": "assistant",
-                    "content": msg.text
-                })
-
-        # Сортировка по времени, если в модели есть created_at
-        history.sort(key=lambda x: x.get("created_at", 0))
         return history
 
     async def generate_response(self) -> Tuple[str, Optional[str]]:
