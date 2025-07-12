@@ -4,7 +4,7 @@ from aiogram import types
 
 from bot.filters.chat import IsGroup
 from core.logger import logger
-from db.models.models import Chat, Account, Message
+from db.psql.models.models import Chat, Account, Message
 from integrations.kwork import KworkAccount
 
 router = Router()

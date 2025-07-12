@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from openai import AsyncOpenAI
-from db.models.models import Message
+from db.psql.models.models import Message
 from settings import settings
 
 

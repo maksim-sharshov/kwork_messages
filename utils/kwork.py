@@ -43,3 +43,9 @@ def msg_in_chat(messages: list, text: str, time_space: int = 43200) -> bool:
 
 def split_text_by_length(text: str, length: int = 4096):
     return [text[i:i + length] for i in range(0, len(text), length)]
+
+def clean_text(text: str) -> str:
+    if text:
+        # удаляем символы с кодом 0 (null byte)
+        return text.replace('\x00', '')
+    return text

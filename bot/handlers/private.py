@@ -9,7 +9,7 @@ from bot.filters.chat import IsPrivate
 from bot.filters.admin import IsManager
 from bot.templates import commands as tcommands
 from core.bot import bot
-from db.models.models import User
+from db.psql.models.models import User
 from settings import settings
 
 router = Router()

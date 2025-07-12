@@ -7,14 +7,13 @@ from aiogram.types import BufferedInputFile, ReactionTypeEmoji
 from integrations.templates import work_time_text
 from core.bot import bot
 from core.logger import manager_logger as logger, dialogs_logger, error_logger
-from db.models.models import Account, Chat, Message, ManagerMode
+from db.psql.models.models import Account, Chat, Message, ManagerMode
 from integrations.kwork import KworkAccount
 from integrations.openai import GPTHandler
 from manager.base import BaseManager
 from settings import settings
-from utils.kwork import msg_in_chat, split_text_by_length, DocumentParser
+from utils.kwork import msg_in_chat, split_text_by_length, DocumentParser, clean_text
 from utils.time import weekend_time
-
 
 
 class KworkManager(BaseManager):
@@ -137,7 +136,7 @@ class KworkManager(BaseManager):
 
             # ===== Создаём запись сообщения в БД =====
             response_time = "Да, сейчас выходное время." if weekend_time() else "Нет, сейчас рабочее время."
-            full_input_text = user_message + "\n" + document_text + "\n" + response_time
+            full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time )
             for part in split_text_by_length(full_input_text):
                 await Message.create(
                     kwork_user_id=kwork_user_id,

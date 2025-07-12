@@ -6,7 +6,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommandScopeDefault
 
 from core.bot import bot
-from db.crud.base import create_tables
+from db.psql.crud.base import create_tables
 from bot.handlers import routers
 from settings import settings
 

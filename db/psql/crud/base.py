@@ -3,7 +3,7 @@ from typing import Any, Type
 from pydantic import BaseModel
 
 from core.database import async_db_session, engine
-from db.models.models import Base
+from db.psql.models.models import Base
 from core.logger import logger
 
 

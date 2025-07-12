@@ -6,8 +6,9 @@ from sqlalchemy.orm import Mapped, selectinload, load_only
 from sqlalchemy.sql import select, update as sqlalchemy_update
 
 from core.database import async_db_session, Base
-from db.models.enum import *
-from db.models.mapped_columns import *
+from db.psql.models.enum import *
+from db.psql.models.mapped_columns import *
+
 
 T = TypeVar("T")
 

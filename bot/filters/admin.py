@@ -1,8 +1,8 @@
 from aiogram.filters import Filter
 from aiogram.types import Message
 
-from db.models.enum import Role
-from db.models.models import User
+from db.psql.models.enum import Role
+from db.psql.models.models import User
 
 
 class IsManager(Filter):
