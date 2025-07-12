@@ -6,7 +6,7 @@ from aiogram.types import BufferedInputFile, ReactionTypeEmoji
 
 from integrations.templates import work_time_text
 from core.bot import bot
-from core.logger import manager_logger as logger
+from core.logger import manager_logger as logger, dialogs_logger, error_logger
 from db.models.models import Account, Chat, Message, ManagerMode
 from integrations.kwork import KworkAccount
 from integrations.openai import GPTHandler
@@ -131,7 +131,8 @@ class KworkManager(BaseManager):
                     user_message = text
 
             except Exception as e:
-                logger.error(f"Error processing message {message.get('MID')}: {e}")
+                logger.error(f"Ошибка обработки сообщения {message.get('MID')}: {e}")
+                error_logger.error(f"Ошибка обработки сообщения {message.get('MID')}: {e}")
                 continue
 
             # ===== Создаём запись сообщения в БД =====
@@ -147,6 +148,7 @@ class KworkManager(BaseManager):
                     text=part,
                     viewed=True
                 )
+                dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
 
             # Запрос в gpt
             gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
@@ -156,7 +158,7 @@ class KworkManager(BaseManager):
                 user_id=kwork_user_id,
                 text=answer
             )
-            print('\n\n', answer, '\n\n' ,application, '\n\n')
+            dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
 
             if application: # Перевод на менеджера
                 await self.create_topic(

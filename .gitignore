@@ -9,6 +9,8 @@ __pycache__/
 
 logs.log
 manager.log
+dialogs.json
+error.log
 
 # Distribution / packaging
 .Python
