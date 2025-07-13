@@ -49,7 +49,6 @@ class GPTHandler:
                     "role": role,
                     "content": msg.content
                 })
-
         return history
 
     async def generate_response(self) -> Tuple[str, Optional[str]]:
@@ -62,7 +61,7 @@ class GPTHandler:
         full_messages = [{"role": "system", "content": prompt}] + history
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini", 
+            model="gpt-4o", 
             messages=full_messages,
         )
 
@@ -92,4 +91,4 @@ class GPTHandler:
                 if not reply.strip() and application_text:
                     reply = "Спасибо! Мы приняли заявку. Ожидайте, пожалуйста, обратной связи."
 
-        return reply.replace('`', ''), application_text
+        return reply.replace('`', ''), (application_text.replace('`', '') if application_text else '')

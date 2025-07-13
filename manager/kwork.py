@@ -143,7 +143,7 @@ class KworkManager(BaseManager):
                     kwork_user_id=kwork_user_id,
                     recipient_id=1,
                     sender='user',
-                    content=user_message
+                    content=full_input_text
                 )
 
                 # Фиксируем, что сообщение прочитано
@@ -152,7 +152,7 @@ class KworkManager(BaseManager):
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
                     tg_msg_id=0,
-                    text=user_message,
+                    text=full_input_text,
                     viewed=True
                 )
 

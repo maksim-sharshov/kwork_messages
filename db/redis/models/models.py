@@ -99,7 +99,7 @@ class MessageAI(ModelAdmin):
         """
         Удалить все сообщения, где kwork_id = user_id ИЛИ recipient_id = user_id
         """
-        msgs_by_kwork = await cls.filter(kwork_id=user_id)
+        msgs_by_kwork = await cls.filter(kwork_user_id=user_id)
         msgs_by_recipient = await cls.filter(recipient_id=user_id)
 
         # Объединяем списки, чтобы не удалять дважды одинаковые сообщения
