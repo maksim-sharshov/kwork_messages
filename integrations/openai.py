@@ -27,13 +27,13 @@ class GPTHandler:
 
         # Сообщения пользователя
         user_messages = await MessageAI.filter(
-            kwork_id=self.kwork_user_id,
-            recipient_id=self.recipient_id
+            kwork_user_id=self.kwork_user_id,
+            recipient_id=1
         )
 
         # Ответы ИИ
         assistant_messages = await MessageAI.filter(
-            kwork_id=1,
+            kwork_user_id=1,
             recipient_id=self.kwork_user_id
         )
 
@@ -44,7 +44,7 @@ class GPTHandler:
         history = []
         for msg in all_messages:
             if msg.content:
-                role = "user" if msg.kwork_id == self.kwork_user_id else "assistant"
+                role = "user" if msg.kwork_user_id == self.kwork_user_id else "assistant"
                 history.append({
                     "role": role,
                     "content": msg.content

@@ -41,7 +41,6 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
 
     await Message.create(
         kwork_user_id=0,
-        recipient_id=chat.kwork_user_id,
         username=kwork_account.name,
         kwork_msg_id=kwork_message['MID'],
         tg_msg_id=msg.message_id,

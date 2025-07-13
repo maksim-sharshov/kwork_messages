@@ -140,11 +140,22 @@ class KworkManager(BaseManager):
             full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time )
             for part in split_text_by_length(full_input_text):
                 await MessageAI.create(
-                    kwork_id=kwork_user_id,
+                    kwork_user_id=kwork_user_id,
                     recipient_id=1,
                     sender='user',
                     content=user_message
                 )
+
+                # Фиксируем, что сообщение прочитано
+                await Message.create(
+                    kwork_user_id=kwork_user_id,
+                    username=message['mfrom'],
+                    kwork_msg_id=message['MID'],
+                    tg_msg_id=0,
+                    text=user_message,
+                    viewed=True
+                )
+
                 dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
 
             # Запрос в gpt
@@ -157,6 +168,23 @@ class KworkManager(BaseManager):
             )
             dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
 
+            await MessageAI.create(
+                kwork_user_id=1,
+                recipient_id=kwork_user_id,
+                sender='ai',
+                content=answer
+            )  
+
+            # Фиксируем, что сообщение прочитано
+            await Message.create(
+                kwork_user_id=1,
+                username=kwork_message["author"]["username"],
+                kwork_msg_id=kwork_message['MID'],
+                tg_msg_id=0,
+                text=answer,
+                viewed=True
+            )
+
             if application: # Перевод на менеджера
                 await self.create_topic(
                     message=message,
@@ -164,13 +192,7 @@ class KworkManager(BaseManager):
                     account_id=account_id,
                     application=application
                 )
-                
-            await MessageAI.create(
-                kwork_id=1,
-                recipient_id=kwork_user_id,
-                sender='ai',
-                content=answer
-            )
+                await MessageAI.delete_all_for_user(user_id=kwork_user_id)
 
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
         """
@@ -267,7 +289,6 @@ class KworkManager(BaseManager):
                 # Сохраняем в базу
                 await Message.create(
                     kwork_user_id=kwork_user_id,
-                    recipient_id=recipient_id,
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
                     tg_msg_id=tg_msg.message_id if tg_msg else None,

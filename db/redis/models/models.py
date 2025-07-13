@@ -85,7 +85,7 @@ class ModelAdmin(HashModel, Generic[T]):
 # Хранение сообщений с ИИ
 class MessageAI(ModelAdmin):
 
-    kwork_id: int = Field(index=True, description="Kwork ID пользователя")
+    kwork_user_id: int = Field(index=True, description="Kwork ID пользователя")
     recipient_id: int = Field(index=True, description="ID получателя")
     sender: Literal['user', 'ai'] = Field(index=True, description="Отправитель сообщения: пользователь или ИИ")
     content: str = Field(description="Текст сообщения")
