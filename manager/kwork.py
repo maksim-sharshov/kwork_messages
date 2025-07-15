@@ -19,7 +19,7 @@ from utils.time import weekend_time
 
 class KworkManager(BaseManager):
     
-    timeout = 1
+    timeout = 40
 
     async def run(self):
         logger.info('=== Kwork Manager is running ===')
@@ -58,11 +58,18 @@ class KworkManager(BaseManager):
 
                 logger.info('Не прочитанных сообщений: %d', len(unprocessed_messages))
 
-                # Создание топиков для всех диалогов
+                # Обновление записи для менеджер/ии
                 await self.update_flag_and_check(
                     account_id=account.id,
                     dialogs=dialogs['data']['rows']
-                )  
+                ) 
+
+                # Создание топиков для всех диалогов
+                await self.create_topic(
+                    account_username=account_kwork.name,
+                    account_id=account.id,
+                    dialogs=dialogs['data']['rows']
+                )
                 
                 # Ответ на не прочитанные сообщения (обработка менеджером)
                 await self.process_messages(
@@ -97,12 +104,19 @@ class KworkManager(BaseManager):
             else:
                 kwork_user_id = int(message['MSGFROM'])
 
+            # Если уже сделан перевод на менеджера
             info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
             if info_user and info_user.flag:
                 continue
-
-            if recipient_id == kwork_user_id:  # ПОТОМ УДАЛИТЬ
+            
+            # Если это наше ссообщение
+            if recipient_id == kwork_user_id:
                 continue
+
+            chat = await Chat.get(
+                kwork_user_id=kwork_user_id,
+                account_id=account_id
+            )
 
             user_message = ""
             document_text = ""
@@ -126,6 +140,28 @@ class KworkManager(BaseManager):
                         if text_from_file:
                             document_text += f"\n\n--- Из файла {filename} ---\n{text_from_file}"
 
+                        # Отправляем сам файл (всегда)
+                        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif')):
+                            photo = BufferedInputFile(
+                                file=content,
+                                filename=filename
+                            )
+                            await bot.send_photo(
+                                chat_id=chat.tg_chat_id,
+                                message_thread_id=chat.tg_topic_id,
+                                photo=photo
+                            )
+                        else:
+                            document = BufferedInputFile(
+                                file=content,
+                                filename=filename
+                            )
+                            await bot.send_document(
+                                chat_id=chat.tg_chat_id,
+                                message_thread_id=chat.tg_topic_id,
+                                document=document
+                            )
+
                 # ===== Обработка обычного текста =====
                 if (text := message.get('message', None)):
                     user_message = text
@@ -139,6 +175,16 @@ class KworkManager(BaseManager):
             response_time = "Не работаем, сейчас выходное время." if weekend_time() else "Работаем, сейчас рабочее время."
             full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time )
             for part in split_text_by_length(full_input_text):
+
+                # Отправляем сообщение в ТГ
+                tg_msg = await bot.send_message(
+                    chat_id=chat.tg_chat_id,
+                    message_thread_id=chat.tg_topic_id,
+                    text='<u><b>USER:</b></u> ' + user_message,
+                    parse_mode='HTML'
+                )
+
+                # Сохраняем для ИИ
                 await MessageAI.create(
                     kwork_user_id=kwork_user_id,
                     recipient_id=1,
@@ -151,7 +197,7 @@ class KworkManager(BaseManager):
                     kwork_user_id=kwork_user_id,
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
-                    tg_msg_id=0,
+                    tg_msg_id=tg_msg.message_id if tg_msg else 0,
                     text=full_input_text,
                     viewed=True
                 )
@@ -168,6 +214,15 @@ class KworkManager(BaseManager):
             )
             dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
 
+            # Отправляем сообщение в ТГ
+            tg_msg = await bot.send_message(
+                chat_id=chat.tg_chat_id,
+                message_thread_id=chat.tg_topic_id,
+                text='<u><b>GPT:</b></u> ' + answer,
+                parse_mode='HTML'
+            )
+
+            # Сохраняем для ИИ
             await MessageAI.create(
                 kwork_user_id=1,
                 recipient_id=kwork_user_id,
@@ -180,18 +235,21 @@ class KworkManager(BaseManager):
                 kwork_user_id=1,
                 username=kwork_message["author"]["username"],
                 kwork_msg_id=kwork_message['MID'],
-                tg_msg_id=0,
+                tg_msg_id=tg_msg.message_id if tg_msg else 0,
                 text=answer,
                 viewed=True
             )
 
             if application: # Перевод на менеджера
-                await self.create_topic(
-                    message=message,
-                    kwork_user_id=kwork_user_id,
-                    account_id=account_id,
-                    application=application
+
+                await bot.send_message(
+                    chat_id=chat.tg_chat_id,
+                    message_thread_id=chat.tg_topic_id,
+                    text=application,
+                    parse_mode=None
                 )
+
+                await info_user.update(flag=True)
                 await MessageAI.delete_all_for_user(user_id=kwork_user_id)
 
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
@@ -291,7 +349,7 @@ class KworkManager(BaseManager):
                     kwork_user_id=kwork_user_id,
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
-                    tg_msg_id=tg_msg.message_id if tg_msg else None,
+                    tg_msg_id=tg_msg.message_id if tg_msg else 0,
                     text=user_message
                 )
                 logger.info('Message resent to Telegram and saved in DB')
@@ -376,54 +434,52 @@ class KworkManager(BaseManager):
             chat_with_user = await Chat.get(kwork_user_id=user_id, account_id=account_id)
             info_user = await ManagerMode.get(kwork_user_id=user_id)
 
-            if chat_with_user and not info_user:
+            if chat_with_user and info_user:
+                return bool(info_user.flag)
+            
+            elif not chat_with_user and not info_user:
+                await ManagerMode.create(kwork_user_id=user_id, flag=False)
+                return False
+
+            elif chat_with_user and not info_user:
                 await ManagerMode.create(kwork_user_id=user_id, flag=True)
                 return True
-
-            elif chat_with_user and info_user:
-                if not info_user.flag:
-                    await info_user.update(flag=True)
-                return True
-
-            if not info_user:
-                await ManagerMode.create(kwork_user_id=user_id)
+            
+            elif not chat_with_user and info_user:
+                return False
 
             return False
 
-    async def create_topic(self, message: dict, kwork_user_id: int, account_id: int, application: str) -> None:
+    async def create_topic(self, account_username: str, account_id: int, dialogs: list[dict]) -> None:
         """
-        Создаёт новую тему в форуме и записывает информацию о чате в базу.
-
-        :param message: Словарь с информацией о сообщении пользователя.
-        :param kwork_user_id: Идентификатор пользователя Kwork.
-        :param account_id: Идентификатор аккаунта.
-        :param application: Текст заявки или сообщения для отправки в тему.
-        :return: None
+            Для каждого диалога в кворк создаёт свой топик в группе
+        :param account_username: Username аккаунта
+        :param account_id: Account id
+        :param dialogs: Диалоги
+        :return:
         """
+        for dialog in dialogs:
+            if await Chat.get(
+                    kwork_user_id=dialog['user_id'],
+                    account_id=account_id
+            ):
+                continue
 
-        info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
-        await info_user.update(flag=True)
+            topic_title = f'K | {dialog['username']} | {account_username}'
 
-        topic_title = f'K | {message['mfrom']} | {message['mto']}'
+            topic = await bot.create_forum_topic(
+                chat_id=settings.bot.CHAT_ID,
+                name=topic_title
+            )
 
-        topic = await bot.create_forum_topic(
-            chat_id=settings.bot.CHAT_ID,
-            name=topic_title
-        )
+            chat = await Chat.create(
+                kwork_user_id=dialog['user_id'],
+                tg_chat_id=settings.bot.CHAT_ID,
+                tg_topic_id=topic.message_thread_id,
+                title=topic_title,
+                account_id=account_id
+            )
 
-        chat = await Chat.create(
-            kwork_user_id=kwork_user_id,
-            tg_chat_id=settings.bot.CHAT_ID,
-            tg_topic_id=topic.message_thread_id,
-            title=topic_title,
-            account_id=account_id
-        )
+            logger.info('Создал новый чат: %s', chat.title)
 
-        logger.info('Создал новый чат: %s', chat.title)
-
-        await bot.send_message(
-            chat_id=chat.tg_chat_id,
-            message_thread_id=chat.tg_topic_id,
-            text=application,
-            parse_mode=None
-        )
+            await asyncio.sleep(3)

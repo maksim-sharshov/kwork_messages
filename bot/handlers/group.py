@@ -4,7 +4,8 @@ from aiogram import types
 
 from bot.filters.chat import IsGroup
 from core.logger import logger
-from db.psql.models.models import Chat, Account, Message
+from db.psql.models.models import Chat, Account, Message, ManagerMode
+from db.redis.models.models import MessageAI
 from integrations.kwork import KworkAccount
 
 router = Router()
@@ -39,6 +40,7 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
             text='🤖: ' + kwork_message['response']
         )
 
+    # Сохраняем сообщение
     await Message.create(
         kwork_user_id=0,
         username=kwork_account.name,
@@ -46,3 +48,13 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
         tg_msg_id=msg.message_id,
         text=msg.text
     )
+
+    # Сохраняем сообщение как ответ ИИ
+    info_user = await ManagerMode.get(kwork_user_id=chat.kwork_user_id)
+    if info_user and not info_user.flag:
+        await MessageAI.create(
+            kwork_user_id=1,
+            recipient_id=chat.kwork_user_id,
+            sender='ai',
+            content=msg.text
+        )  
