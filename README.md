@@ -23,7 +23,6 @@
    REDIS_HOST=
    REDIS_PORT=
    REDIS_PASSWORD=
-   REDIS_USER=
 
    OPENAI_TOKEN=
     ```
