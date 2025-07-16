@@ -147,11 +147,9 @@ class KworkAccount:
 
         while retries:
             try:
-                timeout = aiohttp.ClientTimeout(total=20)
                 async with aiohttp.ClientSession(
                         base_url=self._base_url,
-                        headers=self.headers,
-                        timeout=timeout
+                        headers=self.headers
                 ) as s:
                     async with s.post(
                             url="/sendmessage",

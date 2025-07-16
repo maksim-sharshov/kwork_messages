@@ -213,7 +213,7 @@ class KworkManager(BaseManager):
                 text=answer
             )
             dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
-            error_logger.info(kwork_message)
+            dialogs_logger.info(f'МИША СЮДА СМОТРИ: {kwork_message}')
 
             # Отправляем сообщение в ТГ
             tg_msg = await bot.send_message(
