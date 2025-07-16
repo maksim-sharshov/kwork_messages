@@ -233,8 +233,8 @@ class KworkManager(BaseManager):
             # Фиксируем, что сообщение прочитано
             await Message.create(
                 kwork_user_id=1,
-                username=kwork_message["author"]["username"],
-                kwork_msg_id=kwork_message['MID'],
+                username=kwork_message.get('mfrom', ''),
+                kwork_msg_id=kwork_message.get('MID', ''),
                 tg_msg_id=tg_msg.message_id if tg_msg else 0,
                 text=answer,
                 viewed=True
@@ -442,8 +442,8 @@ class KworkManager(BaseManager):
                 return False
 
             elif chat_with_user and not info_user:
-                await ManagerMode.create(kwork_user_id=user_id, flag=True)
-                return True
+                await ManagerMode.create(kwork_user_id=user_id, flag=False)
+                return False
             
             elif not chat_with_user and info_user:
                 return False
