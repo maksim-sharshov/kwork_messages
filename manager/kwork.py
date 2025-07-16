@@ -213,6 +213,7 @@ class KworkManager(BaseManager):
                 text=answer
             )
             dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
+            error_logger.info(kwork_message)
 
             # Отправляем сообщение в ТГ
             tg_msg = await bot.send_message(
@@ -234,7 +235,7 @@ class KworkManager(BaseManager):
             await Message.create(
                 kwork_user_id=1,
                 username=kwork_message.get('mfrom', ''),
-                kwork_msg_id=kwork_message.get('MID', ''),
+                kwork_msg_id=kwork_message.get('MID', 1),
                 tg_msg_id=tg_msg.message_id if tg_msg else 0,
                 text=answer,
                 viewed=True
