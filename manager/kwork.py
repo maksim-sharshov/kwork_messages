@@ -22,7 +22,7 @@ GPT_PARAMETER = False
 
 class KworkManager(BaseManager):
     
-    timeout = 1
+    timeout = 40
 
     async def run(self):
         logger.info('=== Kwork Manager is running ===')
