@@ -59,7 +59,6 @@ class RedisConfig(BaseSettings):
     HOST: str
     PORT: int
     PASSWORD: str
-    USER: str
 
     class Config:
         env_prefix = 'REDIS_'

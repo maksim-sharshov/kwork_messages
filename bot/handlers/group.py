@@ -7,6 +7,8 @@ from core.logger import logger
 from db.psql.models.models import Chat, Account, Message, ManagerMode
 from db.redis.models.models import MessageAI
 from integrations.kwork import KworkAccount
+from manager.kwork import GPT_PARAMETER
+
 
 router = Router()
 router.message.filter(IsGroup())
@@ -51,7 +53,7 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
 
     # Сохраняем сообщение как ответ ИИ
     info_user = await ManagerMode.get(kwork_user_id=chat.kwork_user_id)
-    if info_user and not info_user.flag:
+    if info_user and not info_user.flag and GPT_PARAMETER:
         await MessageAI.create(
             kwork_user_id=1,
             recipient_id=chat.kwork_user_id,

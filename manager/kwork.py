@@ -17,9 +17,12 @@ from utils.kwork import msg_in_chat, split_text_by_length, DocumentParser, clean
 from utils.time import weekend_time
 
 
+GPT_PARAMETER = False
+
+
 class KworkManager(BaseManager):
     
-    timeout = 40
+    timeout = 1
 
     async def run(self):
         logger.info('=== Kwork Manager is running ===')
@@ -97,7 +100,12 @@ class KworkManager(BaseManager):
         :param kwork_account: KworkAccount
         :return:
         """
+
+        if not GPT_PARAMETER:
+            return
+
         for message in messages:
+            
             recipient_id = message.get('MSGTO')
             if message['mfrom'].lower() == kwork_account.name.lower():
                 kwork_user_id = int(message['MSGTO'])
@@ -213,7 +221,6 @@ class KworkManager(BaseManager):
                 text=answer
             )
             dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
-            dialogs_logger.info(f'МИША СЮДА СМОТРИ: {kwork_message}')
 
             # Отправляем сообщение в ТГ
             tg_msg = await bot.send_message(
@@ -263,14 +270,20 @@ class KworkManager(BaseManager):
         for message in messages:
 
             # Получаем id пользователя в kwork
+            recipient_id = message.get('MSGTO')
             if message['mfrom'].lower() == kwork_account.name.lower():
                 kwork_user_id = int(message['MSGTO'])
             else:
                 kwork_user_id = int(message['MSGFROM'])
 
             # Если флаг info_user.flag не установлен (False), то ответ отправляет ИИ
-            info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
-            if info_user and not info_user.flag:
+            if GPT_PARAMETER:
+                info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
+                if info_user and not info_user.flag:
+                    continue
+
+            # Если это наше ссообщение
+            if recipient_id == kwork_user_id:
                 continue
 
             chat = await Chat.get(
