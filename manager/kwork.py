@@ -211,6 +211,9 @@ class KworkManager(BaseManager):
                 )
 
                 dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
+            
+            # Задержка для симуляции живого общения
+            await asyncio.sleep(random.uniform(5, 40))
 
             # Запрос в gpt
             gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
