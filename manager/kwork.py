@@ -73,20 +73,20 @@ class KworkManager(BaseManager):
                     account_id=account.id,
                     dialogs=dialogs['data']['rows']
                 )
-                
-                # Ответ на не прочитанные сообщения (обработка менеджером)
-                await self.process_messages(
-                    messages=unprocessed_messages,
-                    kwork_account=account_kwork,
-                    account_id=account.id
-                )
 
                 # Ответ на не прочитанные сообщения (обработка с помощью ИИ)
                 await self.process_message_ai(
                     messages=unprocessed_messages,
                     kwork_account=account_kwork,
                     account_id=account.id
-                )          
+                )
+
+                # Ответ на не прочитанные сообщения (обработка менеджером)
+                await self.process_messages(
+                    messages=unprocessed_messages,
+                    kwork_account=account_kwork,
+                    account_id=account.id
+                )     
 
                 await asyncio.sleep(random.uniform(1, 3))
 
@@ -145,8 +145,18 @@ class KworkManager(BaseManager):
                         filename = file['path'].split('/')[-1]
                         text_from_file = DocumentParser.extract_text(content, filename)
 
-                        if text_from_file:
-                            document_text += f"\n\n--- Из файла {filename} ---\n{text_from_file}"
+                        if not text_from_file:
+
+                            await bot.send_message(
+                                chat_id=chat.tg_chat_id,
+                                message_thread_id=chat.tg_topic_id,
+                                text='🚨 Новый заказ\n\n Неизвестный документ',
+                                parse_mode=None
+                            )
+
+                            await info_user.update(flag=True)
+                            await MessageAI.delete_all_for_user(user_id=kwork_user_id)
+                            return
 
                         # Отправляем сам файл (всегда)
                         if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif')):
@@ -169,7 +179,7 @@ class KworkManager(BaseManager):
                                 message_thread_id=chat.tg_topic_id,
                                 document=document
                             )
-
+                            
                 # ===== Обработка обычного текста =====
                 if (text := message.get('message', None)):
                     user_message = text
