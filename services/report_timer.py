@@ -16,6 +16,10 @@ async def run_one_minutes():
 
 async def check_for_ignore():
 
+    """
+    Отправляет сообщения клиентом о том, актуален ли проект
+    """
+
     all_kwork_user_ignore = await Message.get_users_for_reminder()
 
     for user_id in all_kwork_user_ignore:
@@ -25,7 +29,7 @@ async def check_for_ignore():
             # Если ИИ отключён, то пропускаем
             info_user = await ManagerMode.get(kwork_user_id=user_id)
             if info_user and info_user.flag:
-                return
+                continue
 
             # Данные + отправка сообщения
             chat = await Chat.get(kwork_user_id=user_id)
