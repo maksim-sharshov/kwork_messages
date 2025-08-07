@@ -1,13 +1,15 @@
+from datetime import timedelta
 from typing import TypeVar, Generic, Sequence
 
-from sqlalchemy import ForeignKey, Boolean
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Mapped, selectinload, load_only
 from sqlalchemy.sql import select, update as sqlalchemy_update
+from sqlalchemy import ForeignKey, Boolean,  select, not_, func
 
 from core.database import async_db_session, Base
 from db.psql.models.enum import *
 from db.psql.models.mapped_columns import *
+from db.psql.models.mapped_columns import now_moscow
 
 
 T = TypeVar("T")
@@ -202,6 +204,10 @@ class Message(Base, ModelAdmin):
         BigInteger,
         comment='ID сообщения в kwork'
     )
+    recipient_kwork_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        comment='ID получателя в Kwork'
+    )
     tg_msg_id: Mapped[int] = mapped_column(
         BigInteger,
         comment='ID сообщения в тг чате'
@@ -211,6 +217,68 @@ class Message(Base, ModelAdmin):
         default=False
     )
     text: Mapped[str] = mapped_column(comment='Текст сообщения')
+
+    created_at: Mapped[created_at]
+
+    @classmethod
+    async def get_users_for_reminder(cls) -> list[int]:
+        """
+        Возвращает список kwork_user_id пользователей, которым нужно отправить напоминание
+        "Подскажите пожалуйста, ваш проект ещё актуален?".
+
+        Условия:
+        - Последнее сообщение в диалоге (от пользователя или бота) старше 2 часов.
+        - Знаем, кому было отправлено последнее сообщение (recipient_kwork_user_id != 0).
+        - Бот ещё не отправлял этому пользователю напоминание за последние 2 часа.
+
+        Используется для напоминания неактивным пользователям, независимо от того, кто писал последний.
+        """
+        reminder_text = "Подскажите пожалуйста, ваш проект ещё актуален?"
+        now = now_moscow()
+        two_hours_ago = now - timedelta(hours=2)
+
+        async with async_db_session() as session:
+
+            # 1) Кому уже отправляли напоминание за последние 2 часа
+            subq_bot_sent = (
+                select(cls.recipient_kwork_user_id)
+                .where(
+                    cls.kwork_user_id == 0,
+                    cls.text == reminder_text,
+                    cls.recipient_kwork_user_id != 0,
+                    cls.created_at >= two_hours_ago
+                )
+                .distinct()
+                .subquery()
+            )
+
+            # 2) Последнее сообщение в диалоге (не важно от кого)
+            last_messages = (
+                select(
+                    cls.recipient_kwork_user_id.label("user_id"),
+                    func.max(cls.created_at).label("last_msg_time")
+                )
+                .where(
+                    cls.recipient_kwork_user_id != 0
+                )
+                .group_by(cls.recipient_kwork_user_id)
+                .subquery()
+            )
+
+            # 3) Берём только тех, с кем не было общения 2+ часа и кому бот не писал напоминание
+            query = (
+                select(last_messages.c.user_id)
+                .where(
+                    last_messages.c.last_msg_time <= two_hours_ago,
+                    not_(last_messages.c.user_id.in_(select(subq_bot_sent.c.recipient_kwork_user_id)))
+                )
+            )
+
+            result = await session.execute(query)
+            users = result.scalars().all()
+
+            return users
+
 
 
 class ManagerMode(Base, ModelAdmin):
@@ -225,5 +293,5 @@ class ManagerMode(Base, ModelAdmin):
     flag: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
-        comment='False — отвечает ИИ, True — в чат'
+        comment='False — отвечает ИИ, True — отвечает менеджер'
     )

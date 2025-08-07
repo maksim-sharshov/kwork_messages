@@ -5,11 +5,11 @@ from aiogram import Dispatcher, Bot
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommandScopeDefault
 
-
 from core.bot import bot
 from settings import settings
 from bot.handlers import routers
 from db.psql.crud.base import create_tables
+from services.report_timer import reporter_loop
 
 
 dp = Dispatcher(
@@ -30,13 +30,14 @@ async def startup(bot: Bot) -> None:
     # Инициализация таблиц PostgreSQL
     await create_tables()
 
+    asyncio.create_task(reporter_loop()) # Фоновая задача
+
     # Команды и webhook
     await bot.set_my_commands(
         commands=settings.bot.COMMANDS,
         scope=BotCommandScopeDefault()
     )
     await bot.delete_webhook()
-
 
 
 async def shutdown(bot: Bot) -> None:

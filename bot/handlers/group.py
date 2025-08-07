@@ -7,7 +7,6 @@ from core.logger import logger
 from db.psql.models.models import Chat, Account, Message, ManagerMode
 from db.redis.models.models import MessageAI
 from integrations.kwork import KworkAccount
-from manager.kwork import GPT_PARAMETER
 
 
 router = Router()
@@ -43,8 +42,10 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
         )
 
     # Сохраняем сообщение
+    recipient_id = kwork_message.get('MSGTO')
     await Message.create(
         kwork_user_id=0,
+        recipient_kwork_user_id=recipient_id,
         username=kwork_account.name,
         kwork_msg_id=kwork_message['MID'],
         tg_msg_id=msg.message_id,
@@ -53,10 +54,6 @@ async def msg_to_customer_handler(msg: types.Message, state: FSMContext):
 
     # Сохраняем сообщение как ответ ИИ
     info_user = await ManagerMode.get(kwork_user_id=chat.kwork_user_id)
-    if info_user and not info_user.flag and GPT_PARAMETER:
-        await MessageAI.create(
-            kwork_user_id=1,
-            recipient_id=chat.kwork_user_id,
-            sender='ai',
-            content=msg.text
-        )  
+    if info_user and not info_user.flag:
+        await info_user.update(flag=True)
+        await MessageAI.delete_all_for_user(user_id=chat.kwork_user_id)

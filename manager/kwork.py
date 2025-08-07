@@ -24,6 +24,10 @@ class KworkManager(BaseManager):
     
     timeout = 40
 
+    def __init__(self):
+        super().__init__()
+        self.message_semaphore = asyncio.Semaphore(5)
+
     async def run(self):
         logger.info('=== Kwork Manager is running ===')
         while True:
@@ -95,42 +99,41 @@ class KworkManager(BaseManager):
 
     async def process_message_ai(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
         """
-        Обрабатывает все новые сообщения с помощью ИИ
-        :param messages: Не обработанные сообщения
-        :param kwork_account: KworkAccount
-        :return:
+        Асинхронно обрабатывает все новые сообщения с помощью ИИ (не блокирует выполнение)
         """
-
         if not GPT_PARAMETER:
             return
 
         for message in messages:
-            
-            recipient_id = message.get('MSGTO')
-            if message['mfrom'].lower() == kwork_account.name.lower():
-                kwork_user_id = int(message['MSGTO'])
-            else:
-                kwork_user_id = int(message['MSGFROM'])
-
-            # Если уже сделан перевод на менеджера
-            info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
-            if info_user and info_user.flag:
-                continue
-            
-            # Если это наше ссообщение
-            if recipient_id == kwork_user_id:
-                continue
-
-            chat = await Chat.get(
-                kwork_user_id=kwork_user_id,
-                account_id=account_id
+            asyncio.create_task(
+                self._process_single_message(message, kwork_account, account_id)
             )
 
-            user_message = ""
-            document_text = ""
-
+    async def _process_single_message(self, message: dict, kwork_account: KworkAccount, account_id: int) -> None:
+        async with self.message_semaphore:
             try:
-                # ===== Обработка файлов, если они есть =====
+                recipient_id = message.get('MSGTO')
+                if message['mfrom'].lower() == kwork_account.name.lower():
+                    kwork_user_id = int(message['MSGTO'])
+                else:
+                    kwork_user_id = int(message['MSGFROM'])
+
+                info_user = await ManagerMode.get(kwork_user_id=kwork_user_id)
+                if info_user and info_user.flag:
+                    return
+
+                if recipient_id == kwork_user_id:
+                    return
+
+                chat = await Chat.get(
+                    kwork_user_id=kwork_user_id,
+                    account_id=account_id
+                )
+
+                user_message = ""
+                document_text = ""
+
+                # Обработка файлов
                 if files := message.get('filesArray'):
                     for file in files:
                         async with aiohttp.ClientSession(headers=kwork_account.headers) as session:
@@ -146,132 +149,120 @@ class KworkManager(BaseManager):
                         text_from_file = DocumentParser.extract_text(content, filename)
 
                         if not text_from_file:
-
                             await bot.send_message(
                                 chat_id=chat.tg_chat_id,
                                 message_thread_id=chat.tg_topic_id,
                                 text='🚨 Новый заказ\n\n Неизвестный документ',
                                 parse_mode=None
                             )
-
                             await info_user.update(flag=True)
                             await MessageAI.delete_all_for_user(user_id=kwork_user_id)
                             return
 
-                        # Отправляем сам файл (всегда)
+                        document_text += "\n" + text_from_file
+
+                        # Отправка файла в TG
+                        input_file = BufferedInputFile(file=content, filename=filename)
                         if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif')):
-                            photo = BufferedInputFile(
-                                file=content,
-                                filename=filename
-                            )
                             await bot.send_photo(
                                 chat_id=chat.tg_chat_id,
                                 message_thread_id=chat.tg_topic_id,
-                                photo=photo
+                                photo=input_file
                             )
                         else:
-                            document = BufferedInputFile(
-                                file=content,
-                                filename=filename
-                            )
                             await bot.send_document(
                                 chat_id=chat.tg_chat_id,
                                 message_thread_id=chat.tg_topic_id,
-                                document=document
+                                document=input_file
                             )
-                            
-                # ===== Обработка обычного текста =====
+
+                # Обработка текста
                 if (text := message.get('message', None)):
                     user_message = text
+
+                # Запись в БД + Telegram
+                response_time = "Не работаем, сейчас выходное время." if weekend_time() else "Работаем, сейчас рабочее время."
+                full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time)
+
+                for part in split_text_by_length(full_input_text):
+                    tg_msg = await bot.send_message(
+                        chat_id=chat.tg_chat_id,
+                        message_thread_id=chat.tg_topic_id,
+                        text='<u><b>USER:</b></u> ' + user_message,
+                        parse_mode='HTML'
+                    )
+
+                    await MessageAI.create(
+                        kwork_user_id=kwork_user_id,
+                        recipient_id=1,
+                        sender='user',
+                        content=full_input_text
+                    )
+
+                    await Message.create(
+                        kwork_user_id=kwork_user_id,
+                        recipient_kwork_user_id=recipient_id,
+                        username=message['mfrom'],
+                        kwork_msg_id=message['MID'],
+                        tg_msg_id=tg_msg.message_id if tg_msg else 0,
+                        text=full_input_text,
+                        viewed=True
+                    )
+
+                    dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
+
+                # Задержка перед ответом
+                await asyncio.sleep(random.uniform(90, 180))
+
+                # Генерация ответа GPT
+                gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
+                answer, application = await gpt.generate_response()
+
+                kwork_message = await kwork_account.send_message(
+                    user_id=kwork_user_id,
+                    text=answer
+                )
+
+                dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
+
+                tg_msg = await bot.send_message(
+                    chat_id=chat.tg_chat_id,
+                    message_thread_id=chat.tg_topic_id,
+                    text='<u><b>GPT:</b></u> ' + answer,
+                    parse_mode='HTML'
+                )
+
+                await MessageAI.create(
+                    kwork_user_id=1,
+                    recipient_id=kwork_user_id,
+                    sender='ai',
+                    content=answer
+                )
+
+                await Message.create(
+                    kwork_user_id=1,
+                    username=kwork_message.get('mfrom', ''),
+                    recipient_kwork_user_id=recipient_id,
+                    kwork_msg_id=kwork_message.get('MID', 1),
+                    tg_msg_id=tg_msg.message_id if tg_msg else 0,
+                    text=answer,
+                    viewed=True
+                )
+
+                if application:
+                    await bot.send_message(
+                        chat_id=chat.tg_chat_id,
+                        message_thread_id=chat.tg_topic_id,
+                        text=application,
+                        parse_mode=None
+                    )
+
+                    await info_user.update(flag=True)
+                    await MessageAI.delete_all_for_user(user_id=kwork_user_id)
 
             except Exception as e:
                 logger.error(f"Ошибка обработки сообщения {message.get('MID')}: {e}")
                 error_logger.error(f"Ошибка обработки сообщения {message.get('MID')}: {e}")
-                continue
-
-            # ===== Создаём запись сообщения в БД =====
-            response_time = "Не работаем, сейчас выходное время." if weekend_time() else "Работаем, сейчас рабочее время."
-            full_input_text = clean_text(user_message + "\n" + document_text + "\n" + response_time )
-            for part in split_text_by_length(full_input_text):
-
-                # Отправляем сообщение в ТГ
-                tg_msg = await bot.send_message(
-                    chat_id=chat.tg_chat_id,
-                    message_thread_id=chat.tg_topic_id,
-                    text='<u><b>USER:</b></u> ' + user_message,
-                    parse_mode='HTML'
-                )
-
-                # Сохраняем для ИИ
-                await MessageAI.create(
-                    kwork_user_id=kwork_user_id,
-                    recipient_id=1,
-                    sender='user',
-                    content=full_input_text
-                )
-
-                # Фиксируем, что сообщение прочитано
-                await Message.create(
-                    kwork_user_id=kwork_user_id,
-                    username=message['mfrom'],
-                    kwork_msg_id=message['MID'],
-                    tg_msg_id=tg_msg.message_id if tg_msg else 0,
-                    text=full_input_text,
-                    viewed=True
-                )
-
-                dialogs_logger.info(f'Пользователь {kwork_user_id} написал gpt: {user_message}')
-            
-            # Задержка для симуляции живого общения
-            await asyncio.sleep(random.uniform(5, 40))
-
-            # Запрос в gpt
-            gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
-            answer, application = await gpt.generate_response()
-
-            kwork_message = await kwork_account.send_message(
-                user_id=kwork_user_id,
-                text=answer
-            )
-            dialogs_logger.info(f'GPT ответил пользователю {kwork_user_id}: {answer}')
-
-            # Отправляем сообщение в ТГ
-            tg_msg = await bot.send_message(
-                chat_id=chat.tg_chat_id,
-                message_thread_id=chat.tg_topic_id,
-                text='<u><b>GPT:</b></u> ' + answer,
-                parse_mode='HTML'
-            )
-
-            # Сохраняем для ИИ
-            await MessageAI.create(
-                kwork_user_id=1,
-                recipient_id=kwork_user_id,
-                sender='ai',
-                content=answer
-            )  
-
-            # Фиксируем, что сообщение прочитано
-            await Message.create(
-                kwork_user_id=1,
-                username=kwork_message.get('mfrom', ''),
-                kwork_msg_id=kwork_message.get('MID', 1),
-                tg_msg_id=tg_msg.message_id if tg_msg else 0,
-                text=answer,
-                viewed=True
-            )
-
-            if application: # Перевод на менеджера
-
-                await bot.send_message(
-                    chat_id=chat.tg_chat_id,
-                    message_thread_id=chat.tg_topic_id,
-                    text=application,
-                    parse_mode=None
-                )
-
-                await info_user.update(flag=True)
-                await MessageAI.delete_all_for_user(user_id=kwork_user_id)
 
     async def process_messages(self, messages: list[dict], kwork_account: KworkAccount, account_id: int) -> None:
         """
@@ -374,6 +365,7 @@ class KworkManager(BaseManager):
                 # Сохраняем в базу
                 await Message.create(
                     kwork_user_id=kwork_user_id,
+                    recipient_kwork_user_id=recipient_id,
                     username=message['mfrom'],
                     kwork_msg_id=message['MID'],
                     tg_msg_id=tg_msg.message_id if tg_msg else 0,

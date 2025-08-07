@@ -1,3 +1,4 @@
+import pytz
 from datetime import datetime
 from typing import Annotated
 
@@ -29,3 +30,9 @@ str_3 = Annotated[str, 3]
 str_32 = Annotated[str, 32]
 str_140 = Annotated[str, 140]
 str_240 = Annotated[str, 240]
+
+MOSCOW_TZ = pytz.timezone("Europe/Moscow")
+
+def now_moscow() -> datetime:
+    """Возвращает текущее время по Москве без tzinfo (наивное datetime)."""
+    return datetime.now(MOSCOW_TZ).replace(tzinfo=None)

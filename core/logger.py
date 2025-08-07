@@ -74,6 +74,11 @@ dialogs_logger = setting_logger(
     formatter=JsonFormatter(datefmt='%Y-%m-%d %H:%M:%S'),
 )
 
+notification_loger = setting_logger(
+    logger=getLogger('notification_loger'),
+    logs_path='logs/notification_loger.log',
+)
+
 # Логгер для ошибок
 error_logger = setting_logger(
     logger=getLogger('error_logger'),
