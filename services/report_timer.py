@@ -3,7 +3,7 @@ import asyncio
 from core.bot import bot
 from core.logger import notification_loger
 from integrations.kwork import KworkAccount
-from db.psql.models.models import Message, Account, Chat
+from db.psql.models.models import Message, Account, Chat, ManagerMode
 
 async def run_one_minutes():
     
@@ -21,6 +21,11 @@ async def check_for_ignore():
     for user_id in all_kwork_user_ignore:
 
         try:
+
+            # Если ИИ отключён, то пропускаем
+            info_user = await ManagerMode.get(kwork_user_id=user_id)
+            if info_user and info_user.flag:
+                return
 
             # Данные + отправка сообщения
             chat = await Chat.get(kwork_user_id=user_id)

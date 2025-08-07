@@ -141,6 +141,7 @@ class ModelAdmin(Generic[T]):
 
 
 class User(Base, ModelAdmin):
+    
     __tablename__ = 'users'
 
     id: Mapped[intpk]
@@ -161,6 +162,7 @@ class User(Base, ModelAdmin):
 
 
 class Chat(Base, ModelAdmin):
+
     __tablename__ = 'chats'
 
     id: Mapped[intpk]
@@ -181,6 +183,7 @@ class Chat(Base, ModelAdmin):
 
 
 class Account(Base, ModelAdmin):
+
     __tablename__ = 'accounts'
 
     id: Mapped[intpk]
@@ -190,6 +193,7 @@ class Account(Base, ModelAdmin):
 
 
 class Message(Base, ModelAdmin):
+
     __tablename__ = 'messages'
 
     id: Mapped[intpk]
@@ -278,7 +282,6 @@ class Message(Base, ModelAdmin):
             users = result.scalars().all()
 
             return users
-
 
 
 class ManagerMode(Base, ModelAdmin):
