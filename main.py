@@ -46,7 +46,7 @@ async def shutdown(bot: Bot) -> None:
     :param bot: Bot
     :return:
     """
-    await bot.close()
+    await bot.session.close()
     await dp.stop_polling()
 
 
