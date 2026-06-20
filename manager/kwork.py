@@ -17,7 +17,7 @@ from utils.kwork import msg_in_chat, split_text_by_length, DocumentParser, clean
 from utils.time import weekend_time
 
 
-GPT_PARAMETER = True
+GPT_PARAMETER = False
 
 
 class KworkManager(BaseManager):
