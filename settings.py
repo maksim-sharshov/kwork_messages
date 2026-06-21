@@ -25,6 +25,7 @@ class PostgresConfig(BaseSettings):
 
 class GptConfig(BaseSettings):
     TOKEN: str
+    GPT_ENABLED: bool = False
     
     class Config:
         env_prefix = 'OPENAI_'
@@ -69,17 +70,6 @@ class RedisConfig(BaseSettings):
     def URL(self) -> str:
         return f"redis://:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.NAME}"
 
-
-
-# class OtaskConfig(BaseSettings):
-#     WS_SLUG: str
-#     PASSWORD: str
-#     EMAIL: str
-#
-#     class Config:
-#         env_prefix = 'OTASK_'
-#         env_file = '.env'
-#         extra = 'ignore'
 
 class Settings:
     postgres = PostgresConfig()

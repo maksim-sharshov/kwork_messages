@@ -67,13 +67,13 @@ class ModelAdmin(Generic[T]):
             await session.commit()
 
     @classmethod
-    async def get(cls, select_in_load: str | None = None, **kwargs) -> T:
+    async def get(cls, select_in_load: str | None = None, **kwargs) -> T | None:
         """
         # Возвращает одну запись, которая удовлетворяет введенным параметрам.
 
         :param select_in_load: Загрузить сразу связанную модель.
         :param kwargs: Поля и значения.
-        :return: Объект или вызовет исключение DoesNotExists.
+        :return: Объект или None если не найдено.
         """
 
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
