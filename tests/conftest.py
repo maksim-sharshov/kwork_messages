@@ -11,20 +11,21 @@ import pytest
 @pytest.fixture
 def event_loop():
     """Fixture для asyncio event loop"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
 
 @pytest.fixture
-async def mock_kwork_account():
+def mock_kwork_account():
     """Mock KworkAccount для тестов"""
     account = AsyncMock()
     account.name = "test_account"
     account.account_url = "https://kwork.ru/test_account"
     account.headers = {"Cookie": "test_cookie"}
 
-    account.get_dialogs.return_value = {
+    account.get_dialogs = AsyncMock(return_value={
         "data": {
             "rows": [
                 {
@@ -35,9 +36,9 @@ async def mock_kwork_account():
                 }
             ]
         }
-    }
+    })
 
-    account.get_chat_messages.return_value = {
+    account.get_chat_messages = AsyncMock(return_value={
         "data": {
             "messages": [
                 {
@@ -51,19 +52,19 @@ async def mock_kwork_account():
                 }
             ]
         }
-    }
+    })
 
-    account.send_message.return_value = {
+    account.send_message = AsyncMock(return_value={
         "MID": "msg_response_123",
         "mfrom": "test_account",
         "success": True
-    }
+    })
 
     return account
 
 
 @pytest.fixture
-async def mock_bot():
+def mock_bot():
     """Mock Telegram Bot"""
     bot = AsyncMock()
     bot.send_message = AsyncMock(return_value=MagicMock(message_id=1))
@@ -78,7 +79,7 @@ async def mock_bot():
 
 
 @pytest.fixture
-async def mock_gpt_handler():
+def mock_gpt_handler():
     """Mock GPTHandler для тестов"""
     handler = AsyncMock()
     handler.generate_response = AsyncMock(
@@ -129,3 +130,4 @@ def sample_dialog():
         "last_message_time": "2026-06-20T10:30:00",
         "unread_count": 2
     }
+
