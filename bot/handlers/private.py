@@ -35,32 +35,3 @@ async def start_command(msg: Message, state: FSMContext):
     await msg.answer(
         text=tcommands.start_text
     )
-
-#
-# @router.message(Command('project'))
-# async def project_command(msg: Message, state: FSMContext):
-#     """
-#         Команда project для получения актуального номера проекта
-#     :param msg: Message
-#     :param state: FSMContext
-#     :return:
-#     """
-#     await bot.set_my_commands(
-#         commands=settings.bot.COMMANDS + settings.bot.MANAGER_COMMANDS,
-#         scope=BotCommandScopeChat(chat_id=msg.chat.id)
-#     )
-#
-#     projects = await otask.get_projects()
-#     project_id_list = []
-#
-#     for data in projects['projects']:
-#         project_id = data['name'][-4:]
-#         project_id = re.sub(r'\D', '', project_id)
-#         if project_id:
-#             project_id_list.append(int(project_id))
-#
-#     await msg.answer(
-#         text=tcommands.last_project_text.format(
-#             project_id=max(project_id_list)
-#         )
-#     )

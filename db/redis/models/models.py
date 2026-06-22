@@ -1,8 +1,12 @@
+
+from uuid import uuid4
+from aredis_om import Field
 from datetime import datetime
 from typing import Literal
 from aredis_om import HashModel, Field
 from core.redis import redis_conn as conn
 from typing import TypeVar, Generic, Sequence
+from pydantic import ConfigDict, field_validator
 
 from db.redis.models.mapped_columns import now_moscow
 
@@ -84,12 +88,21 @@ class ModelAdmin(HashModel, Generic[T]):
 
 # Хранение сообщений с ИИ
 class MessageAI(ModelAdmin):
-
+    pk: str = Field(default_factory=lambda: str(uuid4()))
     kwork_user_id: int = Field(index=True, description="Kwork ID пользователя")
     recipient_id: int = Field(index=True, description="ID получателя")
     sender: Literal['user', 'ai'] = Field(index=True, description="Отправитель сообщения: пользователь или ИИ")
     content: str = Field(description="Текст сообщения")
     created_at: datetime = Field(default_factory=now_moscow, index=True, description="Время создания сообщения (московское)")
+
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
+
+    @field_validator('pk', mode='before')
+    @classmethod
+    def validate_pk(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
     class Meta:
         database = conn

@@ -25,10 +25,20 @@ class PostgresConfig(BaseSettings):
 
 class GptConfig(BaseSettings):
     TOKEN: str
-    GPT_ENABLED: bool = False
+    GPT_ENABLED: bool = True
     
     class Config:
         env_prefix = 'OPENAI_'
+        env_file = '.env'
+        extra = 'ignore'
+
+
+class GeminiConfig(BaseSettings):
+    TOKEN: str
+    GMN_ENABLED: bool = True
+    
+    class Config:
+        env_prefix = 'GEMINI_'
         env_file = '.env'
         extra = 'ignore'
 
@@ -76,5 +86,6 @@ class Settings:
     redis = RedisConfig()
     bot = BotConfig()
     openai = GptConfig()
+    gemini = GeminiConfig()
 
 settings = Settings()

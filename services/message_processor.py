@@ -12,7 +12,7 @@ from core.logger import logger, dialogs_logger, error_logger
 from db.psql.models.models import Chat, Message, ManagerMode
 from db.redis.models.models import MessageAI
 from integrations.kwork import KworkAccount
-from integrations.openai import GPTHandler
+from integrations.ai import AIHandlerFactory
 from services.file_service import FileService
 from settings import settings
 from utils.kwork import split_text_by_length, clean_text
@@ -175,12 +175,12 @@ class AIMessageProcessor(MessageProcessor):
                         kwork_user_id=kwork_user_id,
                         recipient_id=1,
                         sender='user',
-                        content=full_input_text
+                        content=user_message
                     )
 
                     await Message.create(
                         kwork_user_id=kwork_user_id,
-                        recipient_kwork_user_id=recipient_id,
+                        recipient_kwork_user_id=1,
                         username=message['mfrom'],
                         kwork_msg_id=message['MID'],
                         tg_msg_id=tg_msg.message_id if tg_msg else 0,
@@ -192,12 +192,13 @@ class AIMessageProcessor(MessageProcessor):
                         f'Пользователь {kwork_user_id} написал gpt: {user_message}'
                     )
 
-                # Задержка перед ответом ИИ
-                await asyncio.sleep(random.uniform(90, 180))
-
-                # Генерация ответа GPT
-                gpt = GPTHandler(kwork_user_id=kwork_user_id, recipient_id=recipient_id)
-                answer, application = await gpt.generate_response()
+                # Генерация ответа через AI обработчик (GPT по умолчанию)
+                ai_handler = AIHandlerFactory.create(
+                    provider="gemini",
+                    kwork_user_id=kwork_user_id,
+                    recipient_id=1
+                )
+                answer, application = await ai_handler.generate_response()
 
                 # Отправить ответ в Kwork
                 kwork_message = await kwork_account.send_message(
@@ -217,8 +218,8 @@ class AIMessageProcessor(MessageProcessor):
 
                 # Сохранить ответ в БД
                 await MessageAI.create(
-                    kwork_user_id=1,
-                    recipient_id=kwork_user_id,
+                    kwork_user_id=kwork_user_id,
+                    recipient_id=recipient_id,
                     sender='ai',
                     content=answer
                 )
