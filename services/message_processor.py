@@ -219,13 +219,13 @@ class AIMessageProcessor(MessageProcessor):
                 # Сохранить ответ в БД
                 await MessageAI.create(
                     kwork_user_id=kwork_user_id,
-                    recipient_id=recipient_id,
+                    recipient_id=0,
                     sender='ai',
                     content=answer
                 )
 
                 await Message.create(
-                    kwork_user_id=1,
+                    kwork_user_id=0,
                     username=kwork_message.get('mfrom', ''),
                     recipient_kwork_user_id=recipient_id,
                     kwork_msg_id=kwork_message.get('MID', 1),

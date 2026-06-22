@@ -30,14 +30,14 @@ class HistoryManager:
         """
         # Сообщения пользователя
         user_messages = await MessageAI.filter(
-            kwork_user_id=kwork_user_id,
-            recipient_id=1
+            recipient_id=1,
+            kwork_user_id=kwork_user_id
         )
 
         # Ответы ИИ
         assistant_messages = await MessageAI.filter(
-            kwork_user_id=1,
-            recipient_id=kwork_user_id
+            recipient_id=0,
+            kwork_user_id=kwork_user_id
         )
 
         # Объединяем и сортируем по времени
@@ -54,6 +54,14 @@ class HistoryManager:
                 history.append(HistoryManager._format_openai(msg, kwork_user_id))
             elif format_type == "gemini":
                 history.append(HistoryManager._format_gemini(msg, kwork_user_id))
+
+        if not history:
+            history = [
+                {
+                    "role": "user",
+                    "parts": [{"text": "Привет"}]
+                }
+            ]
 
         return history
 

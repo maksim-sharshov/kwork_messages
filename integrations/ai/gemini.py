@@ -34,13 +34,6 @@ class GeminiHandler(AIHandler):
             format_type="gemini"
         )
 
-        if not history:
-            history = [
-                {
-                    "role": "user",
-                    "parts": [{"text": "Привет"}]
-                }
-            ]
         return history
 
     async def generate_response(self) -> Tuple[str, Optional[str]]:
