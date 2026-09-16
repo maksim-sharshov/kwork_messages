@@ -52,7 +52,7 @@ class GeminiHandler(AIHandler):
         prompt = await self.load_prompt()
 
         response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             contents=history,
             config=GenerateContentConfig(
                 system_instruction=prompt
