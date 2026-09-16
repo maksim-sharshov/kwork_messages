@@ -269,9 +269,6 @@ OPENAI_GPT_ENABLED=true
 GEMINI_TOKEN=AIza...                # ключ Google Gemini (префикс GEMINI_)
 GEMINI_GMN_ENABLED=true
 ```
-
-> ⚠️ Файл `.env` добавлен в `.gitignore` — никогда не коммитьте реальные токены, cookie и пароли.
-
 ---
 
 ## 🧪 Тестирование
